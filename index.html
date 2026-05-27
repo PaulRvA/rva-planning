@@ -75,8 +75,8 @@
     background: var(--bg); display: flex;
     flex-direction: column; overflow: hidden;
   }
-  .panel-planning  { flex: 0 0 58%; }
-  .panel-resources { flex: 1; }
+  .panel-planning  { flex: 0 0 auto; }
+  .panel-resources { flex: 1; min-height: 0; }
 
   .panel-header {
     background: var(--surface2); border-bottom: 1px solid var(--border);
@@ -94,11 +94,11 @@
   }
 
   /* ── PLANNING TABLE ── */
-  .planning-scroll { overflow: auto; flex: 1; }
+  .planning-scroll { overflow: auto; max-height: 220px; }
   .planning-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
   .planning-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-  .planning-table { width: 100%; border-collapse: collapse; }
+  .planning-table { width: 100%; border-collapse: collapse; table-layout: auto; }
 
   .planning-table thead th {
     background: var(--surface2);
@@ -153,7 +153,7 @@
   .resources-scroll::-webkit-scrollbar { width: 4px; }
   .resources-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-  .res-table { width: 100%; border-collapse: collapse; }
+  .res-table { width: 100%; border-collapse: collapse; table-layout: auto; }
   .res-table thead th {
     background: var(--surface2); border-bottom: 1px solid var(--border);
     border-right: 1px solid var(--border); padding: 6px 12px;
@@ -162,12 +162,16 @@
     text-transform: uppercase; color: var(--muted);
     position: sticky; top: 0; z-index: 2; white-space: nowrap;
   }
+  .res-table thead th.today-col {
+    color: var(--accent); border-bottom: 2px solid var(--accent); background: #1a1600;
+  }
   .res-table tbody tr { border-bottom: 1px solid #1a1f27; }
-  .res-table tbody tr:hover td { background: #13181f; }
+  .res-table tbody tr:hover td { background: #13181f !important; }
   .res-table tbody td {
     padding: 5px 12px; border-right: 1px solid #1a1f27;
     font-size: 12px; vertical-align: middle; white-space: nowrap;
   }
+  .res-table tbody td.today-col { background: #0d1100; }
   .res-groep-row td {
     background: var(--surface) !important;
     padding: 3px 12px !important;
@@ -423,16 +427,16 @@ function renderPlanning(items) {
   document.getElementById('planBadge').textContent = `${items.length} items`;
 }
 
-// ── RENDER RESOURCES (ONDER) met auto-scroll ──
+// ── RENDER RESOURCES (ONDER) — tygodniowy widok ──
 function renderResources(resources, plannings) {
   const active = resources.filter(r => r.Tonen_in_Planning === 'true');
-  const today = fmtDate(new Date());
 
-  const todayPlan = {};
+  // Lookup: resourceID -> datum -> planning
+  const byRes = {};
   plannings.forEach(p => {
-    if (p.Datum === today && !todayPlan[p.Resource.ID]) {
-      todayPlan[p.Resource.ID] = p;
-    }
+    const id = p.Resource.ID;
+    if (!byRes[id]) byRes[id] = {};
+    if (!byRes[id][p.Datum]) byRes[id][p.Datum] = p;
   });
 
   const groupOrder = ['Kantoor','Vast personeel','ZZP','Facilitair','Overig'];
@@ -443,31 +447,39 @@ function renderResources(resources, plannings) {
     groups[g].push(r);
   });
 
+  // Header: Naam | Functie | Groep | ma | di | wo | do | vr
+  let thead = '<tr><th>Naam</th><th>Functie</th><th>Groep</th>';
+  days.forEach(d => {
+    const cls = isToday(d) ? ' class="today-col"' : '';
+    thead += `<th${cls}>${fmtDayLabel(d)}</th>`;
+  });
+  thead += '</tr>';
+
   let tbody = '';
+  const colCount = 3 + days.length;
+
   const renderGroup = g => {
     if (!groups[g]?.length) return;
-    tbody += `<tr class="res-groep-row"><td colspan="5">${g}</td></tr>`;
+    tbody += `<tr class="res-groep-row"><td colspan="${colCount}">${g}</td></tr>`;
     groups[g].forEach(r => {
-      const p = todayPlan[r.ID];
-      const cls = getStatusClass(p?.Startlocatie||null, p?.Taaknummers||null);
-      const lbl = getStatusLabel(p?.Startlocatie||null, p?.Taaknummers||null);
-      const code = r.Resource_code || r.Naam.substring(0,3).toUpperCase();
       tbody += `<tr>
-        <td><span class="initials">${code}</span></td>
         <td style="font-weight:500">${r.Naam}</td>
         <td style="color:var(--muted)">${r.Functie_Werknemer||'—'}</td>
-        <td style="color:var(--muted)">${r.Groep||'—'}</td>
-        <td><span class="res-status ${cls}">${lbl}</span></td>
-      </tr>`;
+        <td style="color:var(--muted)">${r.Groep||'—'}</td>`;
+      days.forEach(d => {
+        const ds = fmtDate(d);
+        const p = byRes[r.ID]?.[ds];
+        const tdCls = isToday(d) ? ' class="today-col"' : '';
+        const cls = getStatusClass(p?.Startlocatie||null, p?.Taaknummers||null);
+        const lbl = getStatusLabel(p?.Startlocatie||null, p?.Taaknummers||null);
+        tbody += `<td${tdCls}><span class="res-status ${cls}">${lbl}</span></td>`;
+      });
+      tbody += '</tr>';
     });
   };
 
   groupOrder.forEach(renderGroup);
   Object.keys(groups).forEach(g => { if (!groupOrder.includes(g)) renderGroup(g); });
-
-  const thead = `<tr>
-    <th style="width:44px"></th><th>Naam</th><th>Functie</th><th>Groep</th><th>Vandaag</th>
-  </tr>`;
 
   document.getElementById('resourcesPanel').innerHTML =
     `<table class="res-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
@@ -515,8 +527,13 @@ async function loadAll() {
     const dateFrom = fmtDateISO(days[0]);
     const dateTo   = fmtDateISO(days[4]);
     const criteria = `(Datum >= "${dateFrom}" && Datum <= "${dateTo}")`;
-    const ppEndpoint = `Planning_Projectplanning_Report?criteria=${encodeURIComponent(criteria)}&from=1&limit=500`;
-    const ppItems = await apiFetch(ppEndpoint);
+    let ppItems = [];
+    for (let from = 1; from <= 10000; from += 200) {
+      const ppEndpoint = `Planning_Projectplanning_Report?criteria=${encodeURIComponent(criteria)}&from=${from}&limit=200`;
+      const chunk = await apiFetch(ppEndpoint);
+      ppItems = ppItems.concat(chunk);
+      if (chunk.length < 200) break;
+    }
 
     renderPlanning(ppItems);
     renderResources(resources, weekPlannings);
