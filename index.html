@@ -447,6 +447,11 @@ function renderResources(resources, plannings) {
     groups[g].push(r);
   });
 
+  // Sorteer alfabetisch op Naam binnen elke groep
+  Object.keys(groups).forEach(g => {
+    groups[g].sort((a, b) => a.Naam.localeCompare(b.Naam, 'nl'));
+  });
+
   // Header: Naam | Functie | Groep | ma | di | wo | do | vr
   let thead = '<tr><th>Naam</th><th>Functie</th><th>Groep</th>';
   days.forEach(d => {
@@ -509,8 +514,13 @@ async function loadAll() {
   dot.style.boxShadow = '0 0 6px var(--orange)';
 
   try {
-    // Resources
-    const resources = await apiFetch('Resources_Report?from=1&limit=200');
+    // Resources — paginatie
+    let resources = [];
+    for (let from = 1; from <= 5000; from += 200) {
+      const chunk = await apiFetch(`Resources_Report?from=${from}&limit=200`);
+      resources = resources.concat(chunk);
+      if (chunk.length < 200) break;
+    }
 
     // Plannings voor bieżący tydzień (Resources status)
     let allPlannings = [];
