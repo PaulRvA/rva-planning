@@ -421,12 +421,11 @@
 
 <script>
 // ─────────────────────────────────────────────
-// CONFIGURATIE — pas hier je cookie string aan
+// CONFIGURATIE
 // ─────────────────────────────────────────────
 const CONFIG = {
-  baseUrl: 'https://app.rvaprojecten.nl/api/v2/ictroosendaal/rva-service/report',
-  // Plak hier je volledige cookie string (kopieer uit DevTools > Headers > Cookie)
-  cookie: '__Secure-iamsdt_client_30025614766=0.EnQSMOWiUGRX_0OKzBqVMGbQhRpa5q3j40XIrCxomZAYIZ_gFDDw4LKZ8J29j70QF7G1KBpAwlOVtcbjyy2oae42pSYifDuayjwWk8ZFdQCDxxz23e9uitnIQmyTz-9T-Wp2924UiokzeBLKNSFK3kCBNclcDyCChtWBqoXjqqUB; _iamadt_client_30025614766=e5a2506457ff438acc1a953066d0851a5ae6ade3e345c8ac2c68999018219fe01430f0e0b299f09dbd8fbd1017b1b528; _iambdt_client_30025614766=c25395b5c6e3cb2da869ee36a526227c3b9aca3c1693c645750083c71cf6ddef6e8ad9c8426c93cfef53f96a76f76e148a89337812ca35214ade408135c95c0f; zalb_754b98fd32=e003042a43da1010e832c2f03c48973a; zccpn=d9d73a1bcc902340ec0e8c0d0ed7d2aeedea0f12bd1a7bdeb174fb189e4a4b6322080eadf60032a822436c9d04a8387a38c59ec4f95e2f6fd35a799de254232b; cli_rgn=NL; zalb_0fb64efc73=26df18345e40aa22b73edaa48f272eba; concsr=d9d73a1bcc902340ec0e8c0d0ed7d2aeedea0f12bd1a7bdeb174fb189e4a4b6322080eadf60032a822436c9d04a8387a38c59ec4f95e2f6fd35a799de254232b; zalb_0350d15cfd=556e2b041aa8497474683ee90d391cbd; iamcsr=e69cd820-4617-4f30-93f8-68eff18306c3; zalb_ad9736e59b=5b8f52e74fa2e07e2f129b57ba70d61e; CT_CSRF_TOKEN=fc9ee0d2-f16e-44f1-810c-f98887c0320f; wms-tkp-token_client_30025614766=30038417044-21f3fb34-9b9b46c9722517546de5087d14e89878; zalb_6de7838b24=1dd2a5c56944645a07aa16213753e187; zalb_a7c5971826=581b4819ce53dc00db9a9ddc0e4a8a79; JSESSIONID=A8DEE7FAEDE47DF013782B78BBF3F59C',
+  // Cloudflare Worker proxy URL
+  workerUrl: 'https://rva-planning.paul-8e9.workers.dev',
   // Hoe vaak data opnieuw laden (milliseconden) — standaard 5 minuten
   refreshInterval: 5 * 60 * 1000,
 };
@@ -544,13 +543,7 @@ document.getElementById('weekLabel').textContent = `Week ${wn} — ${fmtDayLabel
 // API FETCH
 // ─────────────────────────────────────────────
 async function apiFetch(endpoint) {
-  const headers = { 'Accept': '*/*', 'Agent-Type': 'ZohoWidgets' };
-  if (CONFIG.cookie) headers['Cookie'] = CONFIG.cookie;
-
-  const res = await fetch(`${CONFIG.baseUrl}/${endpoint}`, {
-    credentials: 'include',
-    headers
-  });
+  const res = await fetch(`${CONFIG.workerUrl}/?endpoint=${encodeURIComponent(endpoint)}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const json = await res.json();
   if (json.code !== 3000) throw new Error(`API code ${json.code}: ${json.message||''}`);
@@ -740,7 +733,7 @@ async function loadAll() {
 
   try {
     // Load resources
-    const resources = await apiFetch('Resources_Report?criteria=(Tonen_in_Planning%3D%3D%22true%22)&from=1&limit=200');
+    const resources = await apiFetch('Resources_Report?from=1&limit=200');
 
     // Load plannings for all pages (200 per request)
     let allPlannings = [];
